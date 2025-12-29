@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Визуализация сети DBLP (Gravity UI Graph)</title>
+    <link rel="stylesheet" href="style.css">
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <style>
+        #graph-container {
+            width: 100%;
+            height: 100%;
+            border: 1px solid #ddd;
+            background: white;
+            position: relative;
+        }
+        .gravity-test {
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+        }
+        .gravity-header {
+            padding: 10px;
+            background: #f5f5f5;
+            border-bottom: 1px solid #ddd;
+        }
+        .gravity-content {
+            flex: 1;
+            display: flex;
+            overflow: hidden;
+        }
+        .gravity-controls {
+            width: 250px;
+            padding: 15px;
+            background: #fafafa;
+            border-right: 1px solid #ddd;
+            overflow-y: auto;
+        }
+        .gravity-visualization {
+            flex: 1;
+            position: relative;
+        }
+    </style>
+</head>
+<body>
+    <div class="gravity-test">
+        <div class="gravity-header">
+            <h1>Визуализация DBLP (Gravity UI Graph) - Тестовая версия</h1>
+            <p>Эта версия использует @gravity-ui/graph для визуализации больших графов</p>
+        </div>
+        <div class="gravity-content">
+            <aside class="gravity-controls">
+                <h2>Панель управления</h2>
+                
+                <div class="control-group">
+                    <label for="yearFrom">Год от:</label>
+                    <input type="number" id="yearFrom" min="1900" max="2100" placeholder="Начальный год">
+                </div>
+
+                <div class="control-group">
+                    <label for="yearTo">Год до:</label>
+                    <input type="number" id="yearTo" min="1900" max="2100" placeholder="Конечный год">
+                </div>
+
+                <div class="control-group">
+                    <label for="venue">Конференция/Журнал:</label>
+                    <input type="text" id="venue" placeholder="Например: CVPR">
+                </div>
+
+                <div class="control-group">
+                    <label for="limit">Лимит узлов:</label>
+                    <input type="number" id="limit" min="10" max="5000" value="500">
+                </div>
+
+                <button id="loadGraph" class="btn-primary">Загрузить граф</button>
+                <button id="resetView" class="btn-secondary">Сбросить вид</button>
+
+                <div class="stats" id="graphStats">
+                    <h3>Статистика</h3>
+                    <p>Узлов: <span id="nodeCount">0</span></p>
+                    <p>Ребер: <span id="edgeCount">0</span></p>
+                </div>
+
+                <div id="nodeInfo" style="margin-top: 20px;">
+                    <h3>Информация об узле</h3>
+                    <p class="placeholder">Кликните на узел для просмотра информации</p>
+                </div>
+            </aside>
+
+            <main class="gravity-visualization">
+                <div id="graph-container"></div>
+                <div id="graph-loading" class="loading-overlay" style="display: none;">
+                    <div class="loading-spinner"></div>
+                    <div class="loading-text">Загрузка графа...</div>
+                </div>
+            </main>
+        </div>
+    </div>
+
+    <script src="gravity-bundle.js"></script>
+    
+    <script type="text/babel">
+        const { useState, useEffect, useRef } = React;
+        const API_BASE = "http://127.0.0.1:5000/api";
+
+        function GraphVisualization() {
+            const containerRef = useRef(null);
+            const graphRef = useRef(null);
+            const [loading, setLoading] = useState(false);
+            const [stats, setStats] = useState({ nodes: 0, edges: 0 });
+            const [nodeInfo, setNodeInfo] = useState(null);
+            const [error, setError] = useState(null);
+
+            useEffect(() => {
+                if (typeof window.Graph === 'undefined') {
+                    setError('Библиотека @gravity-ui/graph не загружена. Убедитесь, что gravity-bundle.js подключен и выполните: setup_gravity.bat (Windows) или setup_gravity.sh (Linux/Mac)');
+                    return;
+                }
+
+                if (!containerRef.current) return;
+
+                try {
+                    if (!window.Graph) {
+                        throw new Error('Graph класс не найден. Убедитесь, что gravity-bundle.js загружен перед этим скриптом.');
+                    }
+                    
+                    const graph = new window.Graph({
+                        configurationName: "dblp-graph",
+                        blocks: [],
+                        connections: [],
+                        settings: {
+                            canDragCamera: true,
+                            canZoomCamera: true,
+                            useBezierConnections: true,
+                            showConnectionArrows: true,
+                            gridSize: 20
+                        }
+                    }, containerRef.current);
+
+                    graphRef.current = graph;
+                    graph.start();
+
+                    console.log("Gravity Graph инициализирован");
+                } catch (err) {
+                    console.error("Ошибка инициализации графа:", err);
+                    setError("Ошибка инициализации графа: " + err.message);
+                }
+
+                return () => {
+                    if (graphRef.current) {
+                        try {
+                            graphRef.current.destroy?.();
+                        } catch (e) {
+                            console.warn("Ошибка при уничтожении графа:", e);
+                        }
+                    }
+                };
+            }, []);
+
+            const loadGraph = async () => {
+                setLoading(true);
+                setError(null);
+                setNodeInfo(null);
+
+                try {
+                    const yearFrom = document.getElementById('yearFrom').value;
+                    const yearTo = document.getElementById('yearTo').value;
+                    const venue = document.getElementById('venue').value;
+                    const limit = document.getElementById('limit').value || 500;
+
+                    let url = `${API_BASE}/graph?limit=${limit}`;
+                    if (yearFrom) url += `&year_from=${yearFrom}`;
+                    if (yearTo) url += `&year_to=${yearTo}`;
+                    if (venue) url += `&venue=${encodeURIComponent(venue)}`;
+
+                    console.log("Загрузка графа:", url);
+                    const response = await fetch(url);
+                    const data = await response.json();
+
+                    if (data.error) {
+                        setError(data.error);
+                        setLoading(false);
+                        return;
+                    }
+
+                    console.log("Получены данные:", data.nodes.length, "узлов,", data.edges.length, "ребер");
+
+                    const blocks = data.nodes.map((node, index) => {
+                        const angle = (index / data.nodes.length) * 2 * Math.PI;
+                        const radius = Math.sqrt(data.nodes.length) * 50;
+                        const x = Math.cos(angle) * radius;
+                        const y = Math.sin(angle) * radius;
+
+                        return {
+                            is: "block-action",
+                            id: `node_${node.id}`,
+                            x: x,
+                            y: y,
+                            width: 120,
+                            height: 80,
+                            name: node.label || `Author ${node.id}`,
+                            degree: node.degree || 0,
+                            nodeId: node.id,
+                            anchors: [
+                                {
+                                    id: `out_${node.id}`,
+                                    blockId: `node_${node.id}`,
+                                    type: "OUT",
+                                    index: 0
+                                }
+                            ]
+                        };
+                    });
+
+                    const connections = data.edges.map((edge, index) => {
+                        const sourceNode = data.nodes.find(n => n.id === edge.source);
+                        const targetNode = data.nodes.find(n => n.id === edge.target);
+                        
+                        if (!sourceNode || !targetNode) return null;
+
+                        return {
+                            id: `conn_${index}`,
+                            sourceBlockId: `node_${edge.source}`,
+                            sourceAnchorId: `out_${edge.source}`,
+                            targetBlockId: `node_${edge.target}`,
+                            targetAnchorId: `out_${edge.target}`,
+                            weight: edge.weight || 1
+                        };
+                    }).filter(c => c !== null);
+
+                    console.log("Преобразовано:", blocks.length, "блоков,", connections.length, "связей");
+
+                    if (graphRef.current) {
+                        graphRef.current.setEntities({
+                            blocks: blocks,
+                            connections: connections
+                        });
+
+                        setTimeout(() => {
+                            if (graphRef.current) {
+                                graphRef.current.zoomTo("center", { padding: 100 });
+                            }
+                        }, 100);
+
+                        setStats({ nodes: blocks.length, edges: connections.length });
+                    }
+
+                } catch (err) {
+                    console.error("Ошибка загрузки графа:", err);
+                    setError("Ошибка загрузки графа: " + err.message);
+                } finally {
+                    setLoading(false);
+                }
+            };
+
+            useEffect(() => {
+                const loadBtn = document.getElementById('loadGraph');
+                const resetBtn = document.getElementById('resetView');
+
+                if (loadBtn) {
+                    loadBtn.addEventListener('click', loadGraph);
+                }
+
+                if (resetBtn) {
+                    resetBtn.addEventListener('click', () => {
+                        if (graphRef.current) {
+                            graphRef.current.zoomTo("center", { padding: 100 });
+                        }
+                    });
+                }
+
+                return () => {
+                    if (loadBtn) loadBtn.removeEventListener('click', loadGraph);
+                    if (resetBtn) resetBtn.removeEventListener('click', () => {});
+                };
+            }, []);
+
+            useEffect(() => {
+                document.getElementById('nodeCount').textContent = stats.nodes;
+                document.getElementById('edgeCount').textContent = stats.edges;
+            }, [stats]);
+
+            return (
+                <div style={{ width: '100%', height: '100%', position: 'relative' }}>
+                    {error && (
+                        <div style={{
+                            position: 'absolute',
+                            top: '10px',
+                            left: '10px',
+                            right: '10px',
+                            background: '#fee',
+                            border: '1px solid #fcc',
+                            padding: '10px',
+                            borderRadius: '4px',
+                            zIndex: 1000
+                        }}>
+                            <strong>Ошибка:</strong> {error}
+                            <br />
+                            <small>
+                                Для использования @gravity-ui/graph необходимо:
+                                <br />
+                                1. Установить: npm install @gravity-ui/graph
+                                <br />
+                                2. Собрать bundle или использовать через webpack/vite
+                                <br />
+                                3. Подключить скрипт с библиотекой перед этим файлом
+                            </small>
+                        </div>
+                    )}
+                    <div 
+                        ref={containerRef} 
+                        id="graph-container"
+                        style={{ width: '100%', height: '100%' }}
+                    />
+                    {loading && (
+                        <div className="loading-overlay" style={{ display: 'flex' }}>
+                            <div className="loading-spinner"></div>
+                            <div className="loading-text">Загрузка графа...</div>
+                        </div>
+                    )}
+                </div>
+            );
+        }
+
+        const root = ReactDOM.createRoot(document.getElementById('graph-container').parentElement);
+        root.render(<GraphVisualization />);
+    </script>
+</body>
+</html>
+

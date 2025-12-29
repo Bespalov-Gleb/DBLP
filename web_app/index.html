@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Визуализация сети DBLP</title>
+    <link rel="stylesheet" href="style.css">
+    <script type="text/javascript" src="https://unpkg.com/vis-network@latest/dist/vis-network.min.js"></script>
+    <link href="https://unpkg.com/vis-network@latest/dist/vis-network.min.css" rel="stylesheet" type="text/css" />
+    <style>
+        #graph-container {
+            width: 100%;
+            height: 100%;
+            border: 1px solid #ddd;
+            background: white;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Визуализация библиографической базы данных DBLP</h1>
+            <p>Интерактивный граф соавторства</p>
+        </header>
+
+        <div class="main-content">
+            <aside class="control-panel">
+                <h2>Панель управления</h2>
+                
+                <div class="control-group">
+                    <label for="yearFrom">Год от:</label>
+                    <input type="number" id="yearFrom" min="1900" max="2100" placeholder="Начальный год">
+                </div>
+
+                <div class="control-group">
+                    <label for="yearTo">Год до:</label>
+                    <input type="number" id="yearTo" min="1900" max="2100" placeholder="Конечный год">
+                </div>
+
+                <div class="control-group">
+                    <label for="venue">Конференция/Журнал:</label>
+                    <input type="text" id="venue" placeholder="Например: CVPR">
+                </div>
+
+                <div class="control-group">
+                    <label for="limit">Лимит узлов:</label>
+                    <input type="number" id="limit" min="10" max="1000" value="100">
+                </div>
+
+                <div class="control-group">
+                    <label for="centralityMetric">Метрика центральности:</label>
+                    <select id="centralityMetric">
+                        <option value="degree">Степень</option>
+                        <option value="betweenness">Посредничество</option>
+                        <option value="closeness">Близость</option>
+                    </select>
+                </div>
+
+                <div class="control-group">
+                    <label>
+                        <input type="checkbox" id="useAggregation">
+                        Использовать агрегацию (кластеры)
+                    </label>
+                    <small style="display: block; color: #666; margin-top: 5px;">
+                        Рекомендуется для графов > 500 узлов
+                    </small>
+                </div>
+
+                <div class="control-group" id="minClusterSizeGroup" style="display: none;">
+                    <label for="minClusterSize">Мин. размер кластера:</label>
+                    <input type="number" id="minClusterSize" min="2" max="50" value="3">
+                </div>
+
+                <button id="loadGraph" class="btn-primary">Загрузить граф</button>
+                <button id="resetView" class="btn-secondary">Сбросить вид</button>
+                <button id="backToClusters" class="btn-secondary" style="display: none;">← Назад к кластерам</button>
+
+                <div class="stats" id="graphStats">
+                    <h3>Статистика</h3>
+                    <p>Узлов: <span id="nodeCount">0</span></p>
+                    <p>Ребер: <span id="edgeCount">0</span></p>
+                </div>
+            </aside>
+
+            <main class="visualization-area">
+                <div id="graph-container"></div>
+                <div id="graph-loading" class="loading-overlay" style="display: none;">
+                    <div class="loading-spinner"></div>
+                    <div class="loading-text">Загрузка графа...</div>
+                    <div id="stabilization-progress" class="progress-text" style="display: none;"></div>
+                </div>
+            </main>
+
+            <aside class="info-panel" id="infoPanel">
+                <h2>Информация об авторе</h2>
+                <div id="nodeInfo">
+                    <p class="placeholder">Кликните на узел для просмотра информации</p>
+                </div>
+                <div id="node-loading" class="node-loading" style="display: none;">
+                    <div class="loading-spinner-small"></div>
+                    <span>Загрузка информации...</span>
+                </div>
+            </aside>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
+
+
+
+
+
+
+
+
+
